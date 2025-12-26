@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "FileManagment": {
+      "commandName": "Project",
+      "commandLineArgs": "ls"
+    }
+  }
+}
