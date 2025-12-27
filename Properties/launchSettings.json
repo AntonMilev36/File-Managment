@@ -2,7 +2,7 @@
   "profiles": {
     "FileManagment": {
       "commandName": "Project",
-      "commandLineArgs": "cpout test2.txt C:\\Users\\Anton\\Desktop\\test2-desktop.txt"
+      "commandLineArgs": "ls"
     }
   }
 }

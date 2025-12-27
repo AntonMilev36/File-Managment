@@ -5,7 +5,7 @@ using System.Text;
 
 namespace FileManagment
 {
-    public enum FsObjectType : byte { File = 0, Directory = 1 }
+    public enum FsObjectType : byte {Free = 0, File = 1, Directory = 2 }
 
     public struct MetadataRecord
     {
@@ -23,7 +23,9 @@ namespace FileManagment
 
         // Reserving space for 100 metadata entries to prevent overlap with data
         private const int MaxFiles = 100;
-        private const int DataStartOffset = 4 + (MaxFiles * MetadataEntrySize);
+        private const int BlockSize = 512;
+        private const int MetadataStart = 4;
+        private const int DataStartOffset = MetadataStart + (MaxFiles * MetadataEntrySize);
 
         public Builder(string containerPath)
         {
@@ -38,9 +40,11 @@ namespace FileManagment
             {
                 writer.Write(0);
 
-                // Reserve the metadata area by filling it with zeros
-                byte[] reservedSpace = new byte[DataStartOffset - 4];
-                writer.Write(reservedSpace);
+                byte[] reservedMetadata = new byte[MaxFiles * MetadataEntrySize];
+                writer.Write(reservedMetadata);
+
+                byte[] reserveData = new byte[MaxFiles * BlockSize];
+                writer.Write(reserveData);
             }
         }
 
@@ -51,36 +55,46 @@ namespace FileManagment
 
             FileInfo sourceInfo = new FileInfo(sourceFilePath);
             long fileSize = sourceInfo.Length;
+            if (fileSize > BlockSize)
+                throw new Exception($"File too large. Maximum size is {BlockSize} bytes.");
 
             using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
             using (var reader = new BinaryReader(stream))
             using (var writer = new BinaryWriter(stream))
             {
                 int count = reader.ReadInt32();
-                if (count >= MaxFiles) throw new Exception("Container is full (Max 100 files).");
+                if (count >= MaxFiles) throw new Exception($"Container is full (Max {MaxFiles} files).");
 
-                stream.Seek(0, SeekOrigin.End);
-
-                long dataOffset = Math.Max(stream.Position, DataStartOffset); // prevent from having content in the metadata
-                stream.Seek(dataOffset, SeekOrigin.Begin);
-
-                using (var sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read))
+                // Find the first metadata slot that is marked as 'Free'
+                int slotIndex = -1;
+                for (int i = 0; i < MaxFiles; i++)
                 {
-                    // Make a write into smaler peaces
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    while ((bytesRead = sourceStream.Read(buffer, 0, buffer.Length)) > 0)
+                    stream.Seek(MetadataStart + (i * MetadataEntrySize) + MaxFileNameLength + 8 + 8, SeekOrigin.Begin);
+                    if ((FsObjectType)reader.ReadByte() == FsObjectType.Free)
                     {
-                        writer.Write(buffer, 0, bytesRead);
+                        slotIndex = i;
+                        break;
                     }
                 }
 
-                // Write the metadata
-                stream.Seek(4 + (count * MetadataEntrySize), SeekOrigin.Begin);
+                if (slotIndex == -1) 
+                    throw new Exception($"Inconsistency: Count < {MaxFiles} but no free slot found.");
 
+                // Write file content to its reserved block
+                long dataOffset = DataStartOffset + (slotIndex * BlockSize);
+                stream.Seek(dataOffset, SeekOrigin.Begin);
+                using (var sourceStream = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read))
+                {
+                    byte[] buffer = new byte[BlockSize];
+                    int bytesRead = sourceStream.Read(buffer, 0, BlockSize);
+                    writer.Write(buffer, 0, bytesRead);
+                }
+
+                // Write the metadata
+                stream.Seek(MetadataStart + (slotIndex * MetadataEntrySize), SeekOrigin.Begin);
                 byte[] nameBytes = new byte[MaxFileNameLength];
                 byte[] sourceNameBytes = Encoding.UTF8.GetBytes(targetName);
-                Array.Copy(sourceNameBytes, nameBytes, Math.Min(sourceNameBytes.Length, MaxFileNameLength)); // Trunkate the name, if too long
+                Array.Copy(sourceNameBytes, nameBytes, Math.Min(sourceNameBytes.Length, MaxFileNameLength));
 
                 writer.Write(nameBytes);
                 writer.Write(fileSize);
@@ -128,6 +142,47 @@ namespace FileManagment
             }
         }
 
+        public void RemoveFile(string fileName)
+        {
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
+            using (var reader = new BinaryReader(stream))
+            using (var writer = new BinaryWriter(stream))
+            {
+                int currentCount = reader.ReadInt32();
+                bool found = false;
+
+                for (int i = 0; i < MaxFiles; i++)
+                {
+                    stream.Seek(MetadataStart + (i * MetadataEntrySize), SeekOrigin.Begin);
+                    byte[] nameBytes = reader.ReadBytes(MaxFileNameLength);
+                    string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
+
+                    if (name == fileName)
+                    {
+                        // Check if the slot is already free
+                        long statusPos = MetadataStart + (i * MetadataEntrySize) + MaxFileNameLength + 8 + 8;
+                        stream.Seek(statusPos, SeekOrigin.Begin);
+                        if ((FsObjectType)reader.ReadByte() == FsObjectType.Free) 
+                            continue;
+
+                        // 3. Mark as Free (Logical deletion)
+                        stream.Seek(statusPos, SeekOrigin.Begin);
+                        writer.Write((byte)FsObjectType.Free);
+
+                        // 4. Decrement the global counter
+                        stream.Seek(0, SeekOrigin.Begin);
+                        writer.Write(currentCount - 1);
+
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found)
+                    throw new Exception($"File '{fileName}' not found in container.");
+            }
+        }
+
         public IEnumerable<MetadataRecord> ListCurrentDirectory()
         {
             using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
@@ -135,8 +190,9 @@ namespace FileManagment
             {
                 if (stream.Length < 4) yield break;
                 int count = reader.ReadInt32();
+                int found = 0;
 
-                for (int i = 0; i < count; i++)
+                for (int i = 0; i < count && found < count; i++)
                 {
                     byte[] nameBytes = reader.ReadBytes(MaxFileNameLength);
                     string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
@@ -144,7 +200,11 @@ namespace FileManagment
                     long offset = reader.ReadInt64();
                     FsObjectType type = (FsObjectType)reader.ReadByte();
 
-                    yield return new MetadataRecord { Name = name, Size = size, Offset = offset, Type = type };
+                    if (type != FsObjectType.Free)
+                    {
+                        found++;
+                        yield return new MetadataRecord { Name = name, Size = size, Offset = offset, Type = type };
+                    }
                 }
             }
         }
