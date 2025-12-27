@@ -13,19 +13,22 @@ namespace FileManagment
         public long Size;
         public long Offset;
         public FsObjectType Type;
+        public int ParentId;
     }
 
     public class Builder
     {
         private string _containerPath;
         private const int MaxFileNameLength = 32;
-        private const int MetadataEntrySize = MaxFileNameLength + 8 + 8 + 1; // 49 bytes
+        private const int MetadataEntrySize = MaxFileNameLength + 8 + 8 + 1 + 4; // 53 bytes
 
         // Reserving space for 100 metadata entries to prevent overlap with data
         private const int MaxFiles = 100;
         private const int BlockSize = 512;
         private const int MetadataStart = 4;
         private const int DataStartOffset = MetadataStart + (MaxFiles * MetadataEntrySize);
+
+        public int CurrentFolderID { get; set; } = -1; // -1 represents the root
 
         public Builder(string containerPath)
         {
@@ -48,6 +51,7 @@ namespace FileManagment
             }
         }
 
+        // Files functions
         public void WriteFile(string sourceFilePath, string targetName)
         {
             if (!File.Exists(sourceFilePath))
@@ -100,6 +104,7 @@ namespace FileManagment
                 writer.Write(fileSize);
                 writer.Write(dataOffset);
                 writer.Write((byte)FsObjectType.File);
+                writer.Write(CurrentFolderID);
 
                 // Updating the number of writes
                 stream.Seek(0, SeekOrigin.Begin);
@@ -165,11 +170,9 @@ namespace FileManagment
                         if ((FsObjectType)reader.ReadByte() == FsObjectType.Free) 
                             continue;
 
-                        // 3. Mark as Free (Logical deletion)
                         stream.Seek(statusPos, SeekOrigin.Begin);
                         writer.Write((byte)FsObjectType.Free);
 
-                        // 4. Decrement the global counter
                         stream.Seek(0, SeekOrigin.Begin);
                         writer.Write(currentCount - 1);
 
@@ -194,18 +197,74 @@ namespace FileManagment
 
                 for (int i = 0; i < count && found < count; i++)
                 {
+                    stream.Seek(MetadataStart + (i * MetadataEntrySize), SeekOrigin.Begin);
                     byte[] nameBytes = reader.ReadBytes(MaxFileNameLength);
                     string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
                     long size = reader.ReadInt64();
                     long offset = reader.ReadInt64();
                     FsObjectType type = (FsObjectType)reader.ReadByte();
+                    int parentId = reader.ReadInt32();
 
                     if (type != FsObjectType.Free)
                     {
                         found++;
-                        yield return new MetadataRecord { Name = name, Size = size, Offset = offset, Type = type };
+                        // ONLY yield if the file belongs to the CURRENT folder
+                        if (parentId == CurrentFolderID)
+                        {
+                            yield return new MetadataRecord
+                            {
+                                Name = name,
+                                Size = size,
+                                Offset = offset,
+                                Type = type,
+                                ParentId = parentId
+                            };
+                        }
                     }
                 }
+            }
+        }
+
+        // Directories functions
+        public void MakeDirectory(string dirName)
+        {
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
+            using (var reader = new BinaryReader(stream))
+            using (var writer = new BinaryWriter(stream))
+            {
+                int count = reader.ReadInt32();
+                if (count >= MaxFiles) 
+                    throw new Exception("Container is full.");
+
+                int slotIndex = -1;
+                for (int i = 0; i < MaxFiles; i++)
+                {
+                    stream.Seek(MetadataStart + (i * MetadataEntrySize) + MaxFileNameLength + 8 + 8, SeekOrigin.Begin);
+                    if ((FsObjectType)reader.ReadByte() == FsObjectType.Free)
+                    {
+                        slotIndex = i;
+                        break;
+                    }
+                }
+
+                if (slotIndex == -1) 
+                    throw new Exception("No free slots.");
+
+                // write Directory Metadata
+                stream.Seek(MetadataStart + (slotIndex * MetadataEntrySize), SeekOrigin.Begin);
+
+                byte[] nameBytes = new byte[MaxFileNameLength];
+                byte[] sourceNameBytes = Encoding.UTF8.GetBytes(dirName);
+                Array.Copy(sourceNameBytes, nameBytes, Math.Min(sourceNameBytes.Length, MaxFileNameLength));
+
+                writer.Write(nameBytes);
+                writer.Write((long)0);
+                writer.Write((long)-1);
+                writer.Write((byte)FsObjectType.Directory);
+                writer.Write(CurrentFolderID);
+
+                stream.Seek(0, SeekOrigin.Begin);
+                writer.Write(count + 1);
             }
         }
     }

@@ -61,10 +61,10 @@ namespace FileManagment
                 "cpin" => new CpinCommand(),
                 "cpout" => new CpoutCommand(),
                 "rm" => new RmCommand(),
+                "md" => new MdCommand(),
 
                 // Later implementation
 
-                // "md" => new MdCommand(),
                 // "cd" => new CdCommand(),
                 // "rd" => new RdCommand(),
                 _ => null
