@@ -59,11 +59,11 @@ namespace FileManagment
             {
                 "ls" => new LsCommand(),
                 "cpin" => new CpinCommand(),
+                "cpout" => new CpoutCommand(),
 
                 // Later implementation
 
                 // "rm" => new RmCommand(),
-                // "cpout" => new CpoutCommand(),
                 // "md" => new MdCommand(),
                 // "cd" => new CdCommand(),
                 // "rd" => new RdCommand(),
