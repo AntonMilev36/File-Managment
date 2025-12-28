@@ -1,10 +1,11 @@
-﻿using System;
+﻿using FileManagment.FileSystem;
+using System;
 
-namespace FileManagment.Commands
+namespace FileManagment.Commands.DirectoryCommands
 {
     public class MdCommand : ICommand
     {
-        public void Execute(string[] args, Builder storage)
+        public void Execute(string[] args, Context storage)
         {
             if (args.Length < 1)
             {

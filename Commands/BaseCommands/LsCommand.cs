@@ -1,10 +1,11 @@
-﻿using System;
+﻿using FileManagment.FileSystem;
+using System;
 
-namespace FileManagment.Commands
+namespace FileManagment.Commands.BaseCommands
 {
     public class LsCommand : ICommand
     {
-        public void Execute(string[] args, Builder storage)
+        public void Execute(string[] args, Context storage)
         {
             Console.WriteLine("Contents of container:");
             Console.WriteLine("{0,-32} {1,10} {2,10}", "Name", "Size", "Type");

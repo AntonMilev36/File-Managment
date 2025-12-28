@@ -1,13 +1,15 @@
 ﻿using System;
 using System.IO;
 using FileManagment.Commands;
+using FileManagment.Commands.BaseCommands;
+using FileManagment.Commands.DirectoryCommands;
+using FileManagment.Commands.FileCommands;
+using FileManagment.FileSystem;
 
 namespace FileManagment
 {
     public class Program
     {
-        private const string ContainerFileName = "fs_container.bin";
-
         public static void Main(string[] args)
         {
             if (args.Length == 0)
@@ -24,7 +26,7 @@ namespace FileManagment
             try
             {
                 // Intialize the container
-                Builder storage = new Builder(ContainerFileName);
+                Context storage = new Context();
 
                 ICommand? commandInstance = GetCommandInstance(command);
 

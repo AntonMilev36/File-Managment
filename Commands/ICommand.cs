@@ -2,12 +2,12 @@
 using System.Collections.Generic;
 using System.Text;
 using System.Threading.Tasks;
-using FileManagment;
+using FileManagment.FileSystem;
 
 namespace FileManagment.Commands
 {
     public interface ICommand
     {
-        void Execute(string[] args, Builder storage);
+        void Execute(string[] args, Context storage);
     }
 }
