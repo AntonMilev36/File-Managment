@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
+using FileManagment.Utils;
 
 namespace FileManagment.FileSystem.Managers
 {
@@ -73,6 +74,46 @@ namespace FileManagment.FileSystem.Managers
 
                 if (!found) 
                     throw new Exception($"Directory '{dirName}' not found.");
+            }
+        }
+
+        public void RemoveDirectory(string dirName)
+        {
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
+            using (var reader = new BinaryReader(stream))
+            using (var writer = new BinaryWriter(stream))
+            {
+                int currentCount = reader.ReadInt32();
+                int targetSlotIndex = -1;
+
+                // Step 1: Find the directory in the CURRENT folder
+                for (int i = 0; i < Constants.MaxFiles; i++)
+                {
+                    stream.Seek(Constants.MetadataStart + i * _MetadataEntrySize, SeekOrigin.Begin);
+                    byte[] nameBytes = reader.ReadBytes(Constants.MaxFileNameLength);
+                    string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
+
+                    // Skip size and offset
+                    stream.Seek(8 + 8, SeekOrigin.Current);
+                    Structure.FsObjectType type = (Structure.FsObjectType)reader.ReadByte();
+                    int parentId = reader.ReadInt32();
+
+                    if (type == Structure.FsObjectType.Directory && parentId == CurrentFolderID && name == dirName)
+                    {
+                        targetSlotIndex = i;
+                        break;
+                    }
+                }
+
+                if (targetSlotIndex == -1)
+                    throw new Exception($"Directory '{dirName}' not found in current location.");
+
+                // Step 2: Recursively delete this directory and everything inside it
+                int deletedCount = DeleteHelper.DeleteRecursively(targetSlotIndex, stream, reader, writer, _MetadataEntrySize);
+
+                // Update the global file/dir counter
+                stream.Seek(0, SeekOrigin.Begin);
+                writer.Write(currentCount - deletedCount);
             }
         }
     }

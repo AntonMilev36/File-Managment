@@ -70,6 +70,11 @@ namespace FileManagment.FileSystem
             this.CurrentFolderID = _dirManager.CurrentFolderID;
         }
 
+        public void RemoveDirectory(string dirName)
+        {
+            _dirManager.RemoveDirectory(dirName);
+        }
+
         // Shared functions
         public IEnumerable<Structure.MetadataRecord> ListCurrentDirectory()
         {

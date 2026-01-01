@@ -90,10 +90,7 @@ namespace FileManagment
                 "rm" => new RmCommand(),
                 "md" => new MdCommand(),
                 "cd" => new CdCommand(),
-
-                // Later implementation
-
-                // "rd" => new RdCommand(),
+                "rd" => new RdCommand(),
                 _ => null
             };
         }
