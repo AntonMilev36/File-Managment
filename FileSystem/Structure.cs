@@ -12,6 +12,7 @@ namespace FileManagment.FileSystem
 
         public struct MetadataRecord
         {
+            public int Id;
             public string Name;
             public long Size;
             public long Offset;

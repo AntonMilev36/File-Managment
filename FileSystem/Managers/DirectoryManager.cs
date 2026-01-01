@@ -40,5 +40,40 @@ namespace FileManagment.FileSystem.Managers
                 writer.Write(count + 1);
             }
         }
+
+        public void ChangeDirectory(string dirName)
+        {
+            if (dirName == "..")
+            {
+                if (CurrentFolderID == Constants.RootDirectory) return; // Already at root
+
+                // Find current folder's record to see who its parent is
+                var currentFolder = GetRecordById(CurrentFolderID);
+                CurrentFolderID = currentFolder.ParentId;
+            }
+            else if (dirName == "/" || dirName == "\\")
+            {
+                CurrentFolderID = Constants.RootDirectory;
+            }
+            else
+            {
+                // Use the ls logic you already wrote to find the child
+                var children = ListCurrentDirectory();
+                bool found = false;
+
+                foreach (var child in children)
+                {
+                    if (child.Name == dirName && child.Type == Structure.FsObjectType.Directory)
+                    {
+                        CurrentFolderID = child.Id;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) 
+                    throw new Exception($"Directory '{dirName}' not found.");
+            }
+        }
     }
 }

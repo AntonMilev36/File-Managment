@@ -36,6 +36,37 @@ namespace FileManagment.FileSystem.Managers
             throw new Exception($"Inconsistency: Count < {Constants.MaxFiles} but no free slot found.");
         }
 
+        protected Structure.MetadataRecord GetRecordById(int id)
+        {
+            if (id == Constants.RootDirectory)
+                throw new Exception("Root has no metadata record.");
+
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
+            using (var reader = new BinaryReader(stream))
+            {
+                // Seek directly to the slot
+                stream.Seek(Constants.MetadataStart + id * _MetadataEntrySize, SeekOrigin.Begin);
+
+                // Read the data (Same logic as your ls loop)
+                byte[] nameBytes = reader.ReadBytes(Constants.MaxFileNameLength);
+                string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
+                long size = reader.ReadInt64();
+                long offset = reader.ReadInt64();
+                Structure.FsObjectType type = (Structure.FsObjectType)reader.ReadByte();
+                int parentId = reader.ReadInt32();
+
+                return new Structure.MetadataRecord
+                {
+                    Id = id,
+                    Name = name,
+                    Size = size,
+                    Offset = offset,
+                    Type = type,
+                    ParentId = parentId
+                };
+            }
+        }
+
         public IEnumerable<Structure.MetadataRecord> ListCurrentDirectory()
         {
             using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
@@ -62,6 +93,7 @@ namespace FileManagment.FileSystem.Managers
                         {
                             yield return new Structure.MetadataRecord
                             {
+                                Id = i,
                                 Name = name,
                                 Size = size,
                                 Offset = offset,

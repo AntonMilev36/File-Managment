@@ -5,6 +5,7 @@ using FileManagment.Commands.BaseCommands;
 using FileManagment.Commands.DirectoryCommands;
 using FileManagment.Commands.FileCommands;
 using FileManagment.FileSystem;
+using FileManagment.Utils;
 
 namespace FileManagment
 {
@@ -12,12 +13,42 @@ namespace FileManagment
     {
         public static void Main(string[] args)
         {
-            if (args.Length == 0)
-            {
-                ShowUsage();
-                return;
-            }
+            Context storage = new Context();
 
+            if (args.Length > 0)
+            {
+                ExecuteCommand(args, storage);
+            }
+            else
+            {
+                RunInteractiveLoop(storage);
+            }
+        }
+
+        // Handle interactive sessions
+        private static void RunInteractiveLoop(Context storage)
+        {
+            Console.WriteLine("Virtual File System Shell. Type 'exit' to quit.");
+
+            while (true)
+            {
+                Console.Write($"ID:{storage.CurrentFolderID} > ");
+                string input = Console.ReadLine();
+
+                if (string.IsNullOrEmpty(input) || input.ToLower() == "exit")
+                    break;
+
+                string[] commandArgs = CommandsParser.ManualParse(input);
+                if (commandArgs.Length > 0)
+                {
+                    ExecuteCommand(commandArgs, storage);
+                }
+            }
+        }
+
+        // For Debug
+        private static void ExecuteCommand(string[] args, Context storage)
+        {
             string command = args[0].ToLower();
             string[] commandArgs = new string[args.Length - 1];
 
@@ -25,9 +56,6 @@ namespace FileManagment
 
             try
             {
-                // Intialize the container
-                Context storage = new Context();
-
                 ICommand? commandInstance = GetCommandInstance(command);
 
                 if (commandInstance != null)
@@ -50,11 +78,8 @@ namespace FileManagment
             {
                 Console.WriteLine($"An unexpected error occurred: {ex.Message}");
             }
-
-            // Keep the console open, to see the result
-            Console.WriteLine("\nPress any key to exit...");
-            Console.ReadKey();
         }
+
         private static ICommand? GetCommandInstance(string command)
         {
             return command switch
@@ -64,10 +89,10 @@ namespace FileManagment
                 "cpout" => new CpoutCommand(),
                 "rm" => new RmCommand(),
                 "md" => new MdCommand(),
+                "cd" => new CdCommand(),
 
                 // Later implementation
 
-                // "cd" => new CdCommand(),
                 // "rd" => new RdCommand(),
                 _ => null
             };

@@ -42,6 +42,7 @@ namespace FileManagment.FileSystem
         // Files functions
         public void WriteFile(string sourceFilePath, string targetName)
         {
+            _fileManager.CurrentFolderID = this.CurrentFolderID;
             _fileManager.WriteFile(sourceFilePath, targetName);
         }
 
@@ -58,12 +59,21 @@ namespace FileManagment.FileSystem
         // Directories functions
         public void MakeDirectory(string dirName)
         {
+            _dirManager.CurrentFolderID = this.CurrentFolderID;
             _dirManager.MakeDirectory(dirName);
+        }
+
+        public void ChangeDirectory(string dirName)
+        {
+            _dirManager.CurrentFolderID = this.CurrentFolderID;
+            _dirManager.ChangeDirectory(dirName);
+            this.CurrentFolderID = _dirManager.CurrentFolderID;
         }
 
         // Shared functions
         public IEnumerable<Structure.MetadataRecord> ListCurrentDirectory()
         {
+            _dirManager.CurrentFolderID = this.CurrentFolderID;
             return _dirManager.ListCurrentDirectory();
         }
     }
