@@ -4,9 +4,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace FileManagment.FileSystem
+namespace FileManagment.FileSystem.Structure
 {
-    public class Structure
+    public class Metadata
     {
         public enum FsObjectType : byte { Free = 0, File = 1, Directory = 2 }
 

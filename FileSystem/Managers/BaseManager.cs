@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using FileManagment.FileSystem.Structure;
 
 namespace FileManagment.FileSystem.Managers
 {
@@ -28,7 +29,7 @@ namespace FileManagment.FileSystem.Managers
                     + Constants.SizeLength 
                     + Constants.OffsetLength, SeekOrigin.Begin);
 
-                if ((Structure.FsObjectType)reader.ReadByte() == Structure.FsObjectType.Free)
+                if ((Metadata.FsObjectType)reader.ReadByte() == Metadata.FsObjectType.Free)
                 {
                     return i;
                 }
@@ -36,7 +37,7 @@ namespace FileManagment.FileSystem.Managers
             throw new Exception($"Inconsistency: Count < {Constants.MaxFiles} but no free slot found.");
         }
 
-        protected Structure.MetadataRecord GetRecordById(int id)
+        protected Metadata.MetadataRecord GetRecordById(int id)
         {
             if (id == Constants.RootDirectory)
                 throw new Exception("Root has no metadata record.");
@@ -52,10 +53,10 @@ namespace FileManagment.FileSystem.Managers
                 string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
                 long size = reader.ReadInt64();
                 long offset = reader.ReadInt64();
-                Structure.FsObjectType type = (Structure.FsObjectType)reader.ReadByte();
+                Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                 int parentId = reader.ReadInt32();
 
-                return new Structure.MetadataRecord
+                return new Metadata.MetadataRecord
                 {
                     Id = id,
                     Name = name,
@@ -67,7 +68,7 @@ namespace FileManagment.FileSystem.Managers
             }
         }
 
-        public IEnumerable<Structure.MetadataRecord> ListCurrentDirectory()
+        public IEnumerable<Metadata.MetadataRecord> ListCurrentDirectory()
         {
             using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
             using (var reader = new BinaryReader(stream))
@@ -83,15 +84,15 @@ namespace FileManagment.FileSystem.Managers
                     string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
                     long size = reader.ReadInt64();
                     long offset = reader.ReadInt64();
-                    Structure.FsObjectType type = (Structure.FsObjectType)reader.ReadByte();
+                    Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                     int parentId = reader.ReadInt32();
 
-                    if (type != Structure.FsObjectType.Free)
+                    if (type != Metadata.FsObjectType.Free)
                     {
                         found++;
                         if (parentId == CurrentFolderID)
                         {
-                            yield return new Structure.MetadataRecord
+                            yield return new Metadata.MetadataRecord
                             {
                                 Id = i,
                                 Name = name,

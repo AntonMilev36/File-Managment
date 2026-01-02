@@ -2,7 +2,7 @@
 using System.IO;
 using System.Collections.Generic;
 using System.Text;
-using FileManagment.FileSystem;
+using FileManagment.FileSystem.Structure;
 using FileManagment.FileSystem.Persistence;
 using FileManagment.FileSystem.Managers;
 
@@ -48,11 +48,13 @@ namespace FileManagment.FileSystem
 
         public void ReadFile(string sourceName, string destinationPath)
         {
+            _fileManager.CurrentFolderID = this.CurrentFolderID;
             _fileManager.ReadFile(sourceName, destinationPath);
         }
 
         public void RemoveFile(string fileName)
         {
+            _fileManager.CurrentFolderID = this.CurrentFolderID;
             _fileManager.RemoveFile(fileName);
         }
 
@@ -72,11 +74,12 @@ namespace FileManagment.FileSystem
 
         public void RemoveDirectory(string dirName)
         {
+            _dirManager.CurrentFolderID = this.CurrentFolderID;
             _dirManager.RemoveDirectory(dirName);
         }
 
         // Shared functions
-        public IEnumerable<Structure.MetadataRecord> ListCurrentDirectory()
+        public IEnumerable<Metadata.MetadataRecord> ListCurrentDirectory()
         {
             _dirManager.CurrentFolderID = this.CurrentFolderID;
             return _dirManager.ListCurrentDirectory();

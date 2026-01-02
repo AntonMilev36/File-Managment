@@ -3,13 +3,15 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using FileManagment.Utils;
+using FileManagment.FileSystem.Structure;
 
 namespace FileManagment.FileSystem.Managers
 {
     public class DirectoryManager : BaseManager
     {
-        public DirectoryManager(string containerPath, int folderId, int MetadataEntrySize, int DataStartOffset) : base(containerPath, folderId, MetadataEntrySize, DataStartOffset)
+        public DirectoryManager(
+            string containerPath, int folderId, int MetadataEntrySize, int DataStartOffset) 
+            : base(containerPath, folderId, MetadataEntrySize, DataStartOffset)
         {
         }
         public void MakeDirectory(string dirName)
@@ -34,7 +36,7 @@ namespace FileManagment.FileSystem.Managers
                 writer.Write(nameBytes);
                 writer.Write((long)0);
                 writer.Write((long)-1);
-                writer.Write((byte)Structure.FsObjectType.Directory);
+                writer.Write((byte)Metadata.FsObjectType.Directory);
                 writer.Write(CurrentFolderID);
 
                 stream.Seek(0, SeekOrigin.Begin);
@@ -64,7 +66,7 @@ namespace FileManagment.FileSystem.Managers
 
                 foreach (var child in children)
                 {
-                    if (child.Name == dirName && child.Type == Structure.FsObjectType.Directory)
+                    if (child.Name == dirName && child.Type == Metadata.FsObjectType.Directory)
                     {
                         CurrentFolderID = child.Id;
                         found = true;
@@ -84,37 +86,87 @@ namespace FileManagment.FileSystem.Managers
             using (var writer = new BinaryWriter(stream))
             {
                 int currentCount = reader.ReadInt32();
-                int targetSlotIndex = -1;
+                int targetSlotIndex = Constants.RootDirectory;
 
-                // Step 1: Find the directory in the CURRENT folder
                 for (int i = 0; i < Constants.MaxFiles; i++)
                 {
                     stream.Seek(Constants.MetadataStart + i * _MetadataEntrySize, SeekOrigin.Begin);
                     byte[] nameBytes = reader.ReadBytes(Constants.MaxFileNameLength);
                     string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
 
-                    // Skip size and offset
-                    stream.Seek(8 + 8, SeekOrigin.Current);
-                    Structure.FsObjectType type = (Structure.FsObjectType)reader.ReadByte();
+                    stream.Seek(Constants.SizeLength + Constants.OffsetLength, SeekOrigin.Current);
+                    Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                     int parentId = reader.ReadInt32();
 
-                    if (type == Structure.FsObjectType.Directory && parentId == CurrentFolderID && name == dirName)
+                    // Ensures only directories in the current dir will be deleted
+                    if (type == Metadata.FsObjectType.Directory && parentId == CurrentFolderID && name == dirName)
                     {
                         targetSlotIndex = i;
                         break;
                     }
                 }
 
-                if (targetSlotIndex == -1)
+                if (targetSlotIndex == Constants.RootDirectory)
                     throw new Exception($"Directory '{dirName}' not found in current location.");
 
-                // Step 2: Recursively delete this directory and everything inside it
-                int deletedCount = DeleteHelper.DeleteRecursively(targetSlotIndex, stream, reader, writer, _MetadataEntrySize);
+                int deletedCount = DeleteRecursively(targetSlotIndex, _MetadataEntrySize, stream, reader, writer);
 
-                // Update the global file/dir counter
                 stream.Seek(0, SeekOrigin.Begin);
                 writer.Write(currentCount - deletedCount);
             }
+        }
+
+        private static int DeleteRecursively(int slotIndex, int MetadataEntrySize, Stream stream, BinaryReader reader, BinaryWriter writer)
+        {
+            int deletedCount = 1;
+
+            // Mark the delted folder as free
+            stream.Seek(
+                Constants.MetadataStart
+                + (slotIndex * MetadataEntrySize)
+                + Constants.MaxFileNameLength
+                + Constants.SizeLength
+                + Constants.OffsetLength,
+                SeekOrigin.Begin
+                );
+            writer.Write((byte)Metadata.FsObjectType.Free);
+
+            for (int i = 0; i < Constants.MaxFiles; i++)
+            {
+                stream.Seek(Constants.MetadataStart + i * MetadataEntrySize, SeekOrigin.Begin);
+
+                stream.Seek(
+                    Constants.MaxFileNameLength
+                    + Constants.SizeLength
+                    + Constants.OffsetLength,
+                    SeekOrigin.Current
+                    );
+                Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
+                int parentId = reader.ReadInt32();
+
+                if (type != Metadata.FsObjectType.Free && parentId == slotIndex)
+                {
+                    if (type == Metadata.FsObjectType.Directory)
+                    {
+                        deletedCount += DeleteRecursively(i, MetadataEntrySize, stream, reader, writer);
+                    }
+                    else
+                    {
+                        stream.Seek(
+                            Constants.MetadataStart
+                            + (i * MetadataEntrySize)
+                            + Constants.MaxFileNameLength
+                            + Constants.SizeLength
+                            + Constants.OffsetLength,
+                            SeekOrigin.Begin
+                            );
+                        writer.Write((byte)Metadata.FsObjectType.Free);
+                        deletedCount++;
+                    }
+                }
+            }
+
+            return deletedCount;
         }
     }
 }
