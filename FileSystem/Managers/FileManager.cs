@@ -1,9 +1,11 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using FileManagment.FileSystem.Structure;
+using FileManagment.Utils;
 
 namespace FileManagment.FileSystem.Managers
 {
@@ -21,10 +23,11 @@ namespace FileManagment.FileSystem.Managers
 
             byte[] originalData = File.ReadAllBytes(sourceFilePath);
             long originalSize = originalData.Length;
+            long checkSum = Hash.CalculateCheckSum(originalData);
 
             // How often every byte is seen in the file
             long[] freqs = new long[256];
-            foreach (byte b in originalData) 
+            foreach (byte b in originalData)
                 freqs[b]++;
 
             HuffmanHelper helper = new HuffmanHelper();
@@ -40,13 +43,13 @@ namespace FileManagment.FileSystem.Managers
                 foreach (char bit in codeTable[b])
                 {
                     currentByte = (byte)((currentByte << 1) | (bit == '1' ? 1 : 0));
-                    if (++bits == 8) 
-                    { 
-                        compressed.Add(currentByte); currentByte = 0; bits = 0; 
+                    if (++bits == 8)
+                    {
+                        compressed.Add(currentByte); currentByte = 0; bits = 0;
                     }
                 }
             }
-            if (bits > 0) 
+            if (bits > 0)
                 compressed.Add((byte)(currentByte << (8 - bits)));
 
             using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
@@ -55,7 +58,7 @@ namespace FileManagment.FileSystem.Managers
             {
                 int count = reader.ReadInt32();
 
-                if (count >= Constants.MaxFiles) 
+                if (count >= Constants.MaxFiles)
                     throw new Exception("Container full.");
 
                 int slotIndex = FindFreeSlot(reader, stream);
@@ -63,11 +66,12 @@ namespace FileManagment.FileSystem.Managers
 
                 stream.Seek(dataOffset, SeekOrigin.Begin);
 
-                foreach (long f in freqs) 
+                foreach (long f in freqs)
                     writer.Write(f);
 
-                // Write Compressed Content
                 writer.Write(compressed.ToArray());
+
+                stream.Flush(true);
 
                 // Write the metadata
                 stream.Seek(Constants.MetadataStart + slotIndex * _MetadataEntrySize, SeekOrigin.Begin);
@@ -78,18 +82,27 @@ namespace FileManagment.FileSystem.Managers
                 writer.Write(nameBytes);
                 writer.Write(originalSize); // Store original size for decompression
                 writer.Write(dataOffset);
-                writer.Write((byte)Metadata.FsObjectType.File);
+                writer.Write(checkSum);
+
+                // Prevent from writing not fully created files
+                long typePosition = stream.Position;
+                writer.Write((byte)Metadata.FsObjectType.Free);
                 writer.Write(CurrentFolderID);
 
                 stream.Seek(0, SeekOrigin.Begin);
                 writer.Write(count + 1);
+
+                stream.Seek(typePosition, SeekOrigin.Begin);
+                writer.Write((byte)Metadata.FsObjectType.File);
+
+                stream.Flush(true);
             }
         }
 
         public void ReadFile(string sourceName, string destinationPath)
         {
             Metadata.MetadataRecord? target = null;
-            foreach (var record in ListCurrentDirectory())
+            foreach (var record in ListCurrentDirectory().ToList())
             {
                 if (record.Name == sourceName)
                 {
@@ -98,42 +111,93 @@ namespace FileManagment.FileSystem.Managers
                 }
             }
 
-            if (target == null) 
+            if (target == null)
                 throw new Exception("File not found.");
 
-            using (var containerStream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
-            using (var reader = new BinaryReader(containerStream))
-            using (var destinationStream = new FileStream(destinationPath, FileMode.Create, FileAccess.Write))
+            string tempPath = destinationPath + ".tmp";
+            bool success = false;
+            long currentCheckSum = 0;
+
+            try
             {
-                containerStream.Seek(target.Value.Offset, SeekOrigin.Begin);
-
-                // Read frequency table
-                long[] freqs = new long[256];
-                for (int i = 0; i < 256; i++) 
-                    freqs[i] = reader.ReadInt64();
-
-                // Rebuild the tree
-                HuffmanHelper helper = new HuffmanHelper();
-                var root = helper.BuildTree(freqs);
-                var current = root;
-
-                // Decompress bits
-                long decodedBytes = 0;
-                while (decodedBytes < target.Value.Size)
+                using (var containerStream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
+                using (var reader = new BinaryReader(containerStream))
+                using (var writer = new BinaryWriter(containerStream))
                 {
-                    byte b = reader.ReadByte();
-                    for (int i = 7; i >= 0 && decodedBytes < target.Value.Size; i--)
+                    using (var tempStream = new FileStream(tempPath, FileMode.Create, FileAccess.Write))
                     {
-                        int bit = (b >> i) & 1;
-                        current = (bit == 0) ? current.Left : current.Right;
+                        containerStream.Seek(target.Value.Offset, SeekOrigin.Begin);
 
-                        if (current.IsLeaf)
+                        // Read frequency table
+                        long[] freqs = new long[256];
+                        for (int i = 0; i < 256; i++)
+                            freqs[i] = reader.ReadInt64();
+
+                        // Rebuild the tree
+                        HuffmanHelper helper = new HuffmanHelper();
+                        var root = helper.BuildTree(freqs);
+                        var current = root;
+
+                        // Decompress bits
+                        long decodedBytes = 0;
+
+                        while (decodedBytes < target.Value.Size)
                         {
-                            destinationStream.WriteByte(current.Symbol);
-                            decodedBytes++;
-                            current = root;
+                            byte b = reader.ReadByte();
+                            for (int i = 7; i >= 0 && decodedBytes < target.Value.Size; i--)
+                            {
+                                int bit = (b >> i) & 1;
+                                current = (bit == 0) ? current.Left : current.Right;
+
+                                if (current.IsLeaf)
+                                {
+                                    byte symbol = current.Symbol;
+
+                                    tempStream.WriteByte(symbol);
+
+                                    // Update checksum for every single byte decompressed
+                                    currentCheckSum = Hash.CalculateChecksumIncremental(currentCheckSum, symbol);
+
+                                    decodedBytes++;
+                                    current = root;
+                                }
+                            }
                         }
                     }
+                    if (currentCheckSum != target.Value.CheckSum)
+                    {
+                        containerStream.Seek(
+                            Constants.MetadataStart
+                            + (target.Value.Id * _MetadataEntrySize)
+                            + Constants.MaxFileNameLength
+                            + Constants.SizeLength
+                            + Constants.OffsetLength
+                            + Constants.CheckSumLenght,
+                            SeekOrigin.Begin
+                            );
+
+                        writer.Write((byte)Metadata.FsObjectType.Free); // Delete file when corrupted 
+
+                        containerStream.Seek(0, SeekOrigin.Begin);
+                        int currentCount = reader.ReadInt32();
+                        containerStream.Seek(0, SeekOrigin.Begin);
+                        writer.Write(currentCount - 1);
+
+                        throw new Exception("File corrupted (checksum mismatch).");
+                    }
+                    else
+                        success = true;
+                }
+
+                if (success)
+                    // Prevent from overwriting existing files
+                    File.Move(tempPath, destinationPath);
+            }
+            finally
+            {
+                if (!success && File.Exists(tempPath))
+                {
+                    File.Delete(tempPath);
                 }
             }
         }
@@ -162,6 +226,7 @@ namespace FileManagment.FileSystem.Managers
                             + Constants.MaxFileNameLength 
                             + Constants.SizeLength 
                             + Constants.OffsetLength
+                            + Constants.CheckSumLenght
                             );
                         stream.Seek(statusPos, SeekOrigin.Begin);
                         if ((Metadata.FsObjectType)reader.ReadByte() == Metadata.FsObjectType.Free)

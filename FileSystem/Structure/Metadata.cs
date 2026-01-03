@@ -16,6 +16,7 @@ namespace FileManagment.FileSystem.Structure
             public string Name;
             public long Size;
             public long Offset;
+            public long CheckSum;
             public FsObjectType Type;
             public int ParentId;
         }

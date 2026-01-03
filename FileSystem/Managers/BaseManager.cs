@@ -27,7 +27,10 @@ namespace FileManagment.FileSystem.Managers
                     + (i * _MetadataEntrySize) 
                     + Constants.MaxFileNameLength 
                     + Constants.SizeLength 
-                    + Constants.OffsetLength, SeekOrigin.Begin);
+                    + Constants.OffsetLength
+                    + Constants.CheckSumLenght, 
+                    SeekOrigin.Begin
+                    );
 
                 if ((Metadata.FsObjectType)reader.ReadByte() == Metadata.FsObjectType.Free)
                 {
@@ -48,11 +51,11 @@ namespace FileManagment.FileSystem.Managers
                 // Seek directly to the slot
                 stream.Seek(Constants.MetadataStart + id * _MetadataEntrySize, SeekOrigin.Begin);
 
-                // Read the data (Same logic as your ls loop)
                 byte[] nameBytes = reader.ReadBytes(Constants.MaxFileNameLength);
                 string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
                 long size = reader.ReadInt64();
                 long offset = reader.ReadInt64();
+                long checkSum = reader.ReadInt64();
                 Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                 int parentId = reader.ReadInt32();
 
@@ -62,6 +65,7 @@ namespace FileManagment.FileSystem.Managers
                     Name = name,
                     Size = size,
                     Offset = offset,
+                    CheckSum = checkSum,
                     Type = type,
                     ParentId = parentId
                 };
@@ -84,6 +88,7 @@ namespace FileManagment.FileSystem.Managers
                     string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
                     long size = reader.ReadInt64();
                     long offset = reader.ReadInt64();
+                    long checkSum = reader.ReadInt64();
                     Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                     int parentId = reader.ReadInt32();
 
@@ -98,6 +103,7 @@ namespace FileManagment.FileSystem.Managers
                                 Name = name,
                                 Size = size,
                                 Offset = offset,
+                                CheckSum = checkSum,
                                 Type = type,
                                 ParentId = parentId
                             };

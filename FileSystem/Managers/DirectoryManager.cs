@@ -36,6 +36,7 @@ namespace FileManagment.FileSystem.Managers
                 writer.Write(nameBytes);
                 writer.Write((long)0);
                 writer.Write((long)-1);
+                writer.Write((long)0);
                 writer.Write((byte)Metadata.FsObjectType.Directory);
                 writer.Write(CurrentFolderID);
 
@@ -60,7 +61,6 @@ namespace FileManagment.FileSystem.Managers
             }
             else
             {
-                // Use the ls logic you already wrote to find the child
                 var children = ListCurrentDirectory();
                 bool found = false;
 
@@ -94,7 +94,12 @@ namespace FileManagment.FileSystem.Managers
                     byte[] nameBytes = reader.ReadBytes(Constants.MaxFileNameLength);
                     string name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
 
-                    stream.Seek(Constants.SizeLength + Constants.OffsetLength, SeekOrigin.Current);
+                    stream.Seek(
+                        Constants.SizeLength 
+                        + Constants.OffsetLength 
+                        + Constants.CheckSumLenght, 
+                        SeekOrigin.Current
+                        );
                     Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                     int parentId = reader.ReadInt32();
 
@@ -126,19 +131,21 @@ namespace FileManagment.FileSystem.Managers
                 + (slotIndex * MetadataEntrySize)
                 + Constants.MaxFileNameLength
                 + Constants.SizeLength
-                + Constants.OffsetLength,
+                + Constants.OffsetLength
+                + Constants.CheckSumLenght,
                 SeekOrigin.Begin
                 );
             writer.Write((byte)Metadata.FsObjectType.Free);
 
             for (int i = 0; i < Constants.MaxFiles; i++)
             {
-                stream.Seek(Constants.MetadataStart + i * MetadataEntrySize, SeekOrigin.Begin);
-
                 stream.Seek(
-                    Constants.MaxFileNameLength
+                    Constants.MetadataStart 
+                    + (i * MetadataEntrySize)
+                    + Constants.MaxFileNameLength
                     + Constants.SizeLength
-                    + Constants.OffsetLength,
+                    + Constants.OffsetLength
+                    + Constants.CheckSumLenght,
                     SeekOrigin.Current
                     );
                 Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
@@ -157,7 +164,8 @@ namespace FileManagment.FileSystem.Managers
                             + (i * MetadataEntrySize)
                             + Constants.MaxFileNameLength
                             + Constants.SizeLength
-                            + Constants.OffsetLength,
+                            + Constants.OffsetLength
+                            + Constants.CheckSumLenght,
                             SeekOrigin.Begin
                             );
                         writer.Write((byte)Metadata.FsObjectType.Free);

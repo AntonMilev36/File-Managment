@@ -12,6 +12,7 @@ namespace FileManagment.FileSystem
         internal const int MaxFileNameLength = 32;
         internal const int SizeLength = 8;
         internal const int OffsetLength = 8;
+        internal const int CheckSumLenght = 8;
         internal const int TypeLength = 1;
         internal const int ParentIdLength = 4;
         internal const int MaxFiles = 100;
