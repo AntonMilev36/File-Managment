@@ -17,9 +17,10 @@ namespace FileManagment.FileSystem
         private const int MetadataEntrySize = 
             Constants.MaxFileNameLength 
             + Constants.SizeLength 
-            + Constants.OffsetLength 
+            + Constants.OffsetLength
+            + Constants.CheckSumLenght
             + Constants.TypeLength 
-            + Constants.ParentIdLength; // 53 bytes
+            + Constants.ParentIdLength; // 61 bytes
 
         // Reserving space for metadata entries to prevent overlap with data
         private const int DataStartOffset = Constants.MetadataStart + Constants.MaxFiles * MetadataEntrySize;

@@ -16,8 +16,9 @@ namespace FileManagment.FileSystem
         internal const int TypeLength = 1;
         internal const int ParentIdLength = 4;
         internal const int MaxFiles = 100;
-        internal const int BlockSize = 512;
+        internal const int BlockSize = 5120;
         internal const int MetadataStart = 4;
         internal const int RootDirectory = -1;
+        internal const int BufferSize = 4096;
     }
 }
