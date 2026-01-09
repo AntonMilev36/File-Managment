@@ -8,7 +8,7 @@ namespace FileManagment.FileSystem.Structure
 {
     public class Metadata
     {
-        public enum FsObjectType : byte { Free = 0, File = 1, Directory = 2 }
+        public enum FsObjectType : byte { Free = 0, File = 1, Directory = 2, FilePart = 3 }
 
         public struct MetadataRecord
         {
@@ -19,6 +19,7 @@ namespace FileManagment.FileSystem.Structure
             public long CheckSum;
             public FsObjectType Type;
             public int ParentId;
+            public int NextSlotId;
         }
     }
 }

@@ -16,13 +16,19 @@ namespace FileManagment.FileSystem.Managers
         }
         public void MakeDirectory(string dirName)
         {
-            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
             using (var reader = new BinaryReader(stream))
             using (var writer = new BinaryWriter(stream))
             {
                 int count = reader.ReadInt32();
                 if (count >= Constants.MaxFiles)
                     throw new Exception("Container is full.");
+
+                foreach (var record in ListCurrentDirectory())
+                {
+                    if (record.Name == dirName)
+                        throw new Exception("Directory with this name already exists in this directory.");
+                }
 
                 int slotIndex = FindFreeSlot(reader, stream);
 
@@ -39,6 +45,7 @@ namespace FileManagment.FileSystem.Managers
                 writer.Write((long)0);
                 writer.Write((byte)Metadata.FsObjectType.Directory);
                 writer.Write(CurrentFolderID);
+                writer.Write((int)-1);
 
                 stream.Seek(0, SeekOrigin.Begin);
                 writer.Write(count + 1);
@@ -81,7 +88,7 @@ namespace FileManagment.FileSystem.Managers
 
         public void RemoveDirectory(string dirName)
         {
-            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite))
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
             using (var reader = new BinaryReader(stream))
             using (var writer = new BinaryWriter(stream))
             {
@@ -121,7 +128,7 @@ namespace FileManagment.FileSystem.Managers
             }
         }
 
-        private static int DeleteRecursively(int slotIndex, int MetadataEntrySize, Stream stream, BinaryReader reader, BinaryWriter writer)
+        private int DeleteRecursively(int slotIndex, int MetadataEntrySize, Stream stream, BinaryReader reader, BinaryWriter writer)
         {
             int deletedCount = 1;
 
@@ -146,8 +153,9 @@ namespace FileManagment.FileSystem.Managers
                     + Constants.SizeLength
                     + Constants.OffsetLength
                     + Constants.CheckSumLenght,
-                    SeekOrigin.Current
+                    SeekOrigin.Begin
                     );
+
                 Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                 int parentId = reader.ReadInt32();
 
@@ -159,17 +167,25 @@ namespace FileManagment.FileSystem.Managers
                     }
                     else
                     {
-                        stream.Seek(
-                            Constants.MetadataStart
-                            + (i * MetadataEntrySize)
-                            + Constants.MaxFileNameLength
-                            + Constants.SizeLength
-                            + Constants.OffsetLength
-                            + Constants.CheckSumLenght,
-                            SeekOrigin.Begin
-                            );
-                        writer.Write((byte)Metadata.FsObjectType.Free);
-                        deletedCount++;
+                        // It's a file - follow the chain to delete all parts
+                        int slotToDelete = i;
+                        while (slotToDelete != -1)
+                        {
+                            // FIX: Read NextSlotId directly from the current stream 
+                            // (Offset to NextSlotId is MetadataEntrySize - 4)
+                            stream.Seek(Constants.MetadataStart + (slotToDelete * MetadataEntrySize) + (MetadataEntrySize - 4), SeekOrigin.Begin);
+                            int next = reader.ReadInt32();
+
+                            // Mark the slot as free (Offset to Type is 56)
+                            stream.Seek(Constants.MetadataStart + (slotToDelete * MetadataEntrySize) + 56, SeekOrigin.Begin);
+                            writer.Write((byte)Metadata.FsObjectType.Free);
+
+                            deletedCount++;
+
+                            // Safety check: prevent infinite loop if a file points to itself
+                            if (next == slotToDelete) break;
+                            slotToDelete = next;
+                        }
                     }
                 }
             }

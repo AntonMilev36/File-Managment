@@ -22,22 +22,19 @@ namespace FileManagment.FileSystem.Managers
         {
             for (int i = 0; i < Constants.MaxFiles; i++)
             {
-                stream.Seek(
-                    Constants.MetadataStart 
-                    + (i * _MetadataEntrySize) 
-                    + Constants.MaxFileNameLength 
-                    + Constants.SizeLength 
-                    + Constants.OffsetLength
-                    + Constants.CheckSumLenght, 
-                    SeekOrigin.Begin
-                    );
+                // Seek to the start of the record
+                stream.Seek(Constants.MetadataStart + i * _MetadataEntrySize, SeekOrigin.Begin);
 
+                // Skip Name(32), Size(8), Offset(8), CheckSum(8) = 56 bytes
+                stream.Seek(Constants.MaxFileNameLength + Constants.SizeLength + Constants.OffsetLength + Constants.CheckSumLenght, SeekOrigin.Current);
+
+                // Read only the type byte
                 if ((Metadata.FsObjectType)reader.ReadByte() == Metadata.FsObjectType.Free)
                 {
                     return i;
                 }
             }
-            throw new Exception($"Inconsistency: Count < {Constants.MaxFiles} but no free slot found.");
+            throw new Exception("Container is full: no free slot found.");
         }
 
         protected Metadata.MetadataRecord GetRecordById(int id)
@@ -45,7 +42,7 @@ namespace FileManagment.FileSystem.Managers
             if (id == Constants.RootDirectory)
                 throw new Exception("Root has no metadata record.");
 
-            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (var reader = new BinaryReader(stream))
             {
                 // Seek directly to the slot
@@ -58,6 +55,7 @@ namespace FileManagment.FileSystem.Managers
                 long checkSum = reader.ReadInt64();
                 Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                 int parentId = reader.ReadInt32();
+                int nextSlotId = reader.ReadInt32();
 
                 return new Metadata.MetadataRecord
                 {
@@ -67,14 +65,15 @@ namespace FileManagment.FileSystem.Managers
                     Offset = offset,
                     CheckSum = checkSum,
                     Type = type,
-                    ParentId = parentId
+                    ParentId = parentId,
+                    NextSlotId = nextSlotId
                 };
             }
         }
 
         public IEnumerable<Metadata.MetadataRecord> ListCurrentDirectory()
         {
-            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read))
+            using (var stream = new FileStream(_containerPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
             using (var reader = new BinaryReader(stream))
             {
                 if (stream.Length < 4) yield break;
@@ -91,8 +90,9 @@ namespace FileManagment.FileSystem.Managers
                     long checkSum = reader.ReadInt64();
                     Metadata.FsObjectType type = (Metadata.FsObjectType)reader.ReadByte();
                     int parentId = reader.ReadInt32();
+                    int nextSlotId = reader.ReadInt32();
 
-                    if (type != Metadata.FsObjectType.Free)
+                    if (type != Metadata.FsObjectType.Free && type != Metadata.FsObjectType.FilePart)
                     {
                         found++;
                         if (parentId == CurrentFolderID)
@@ -105,7 +105,8 @@ namespace FileManagment.FileSystem.Managers
                                 Offset = offset,
                                 CheckSum = checkSum,
                                 Type = type,
-                                ParentId = parentId
+                                ParentId = parentId,
+                                NextSlotId = nextSlotId
                             };
                         }
                     }

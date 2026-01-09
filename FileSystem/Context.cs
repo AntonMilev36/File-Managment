@@ -20,7 +20,8 @@ namespace FileManagment.FileSystem
             + Constants.OffsetLength
             + Constants.CheckSumLenght
             + Constants.TypeLength 
-            + Constants.ParentIdLength; // 61 bytes
+            + Constants.ParentIdLength
+            + Constants.NextSlotIdLength;
 
         // Reserving space for metadata entries to prevent overlap with data
         private const int DataStartOffset = Constants.MetadataStart + Constants.MaxFiles * MetadataEntrySize;
