@@ -22,13 +22,14 @@ namespace FileManagment.FileSystem.Managers
         {
             for (int i = 0; i < Constants.MaxFiles; i++)
             {
-                // Seek to the start of the record
                 stream.Seek(Constants.MetadataStart + i * _MetadataEntrySize, SeekOrigin.Begin);
 
-                // Skip Name(32), Size(8), Offset(8), CheckSum(8) = 56 bytes
-                stream.Seek(Constants.MaxFileNameLength + Constants.SizeLength + Constants.OffsetLength + Constants.CheckSumLenght, SeekOrigin.Current);
+                stream.Seek(Constants.MaxFileNameLength 
+                    + Constants.SizeLength 
+                    + Constants.OffsetLength 
+                    + Constants.CheckSumLenght, 
+                    SeekOrigin.Current);
 
-                // Read only the type byte
                 if ((Metadata.FsObjectType)reader.ReadByte() == Metadata.FsObjectType.Free)
                 {
                     return i;

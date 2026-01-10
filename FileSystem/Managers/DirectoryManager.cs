@@ -167,22 +167,23 @@ namespace FileManagment.FileSystem.Managers
                     }
                     else
                     {
-                        // It's a file - follow the chain to delete all parts
                         int slotToDelete = i;
                         while (slotToDelete != -1)
                         {
-                            // FIX: Read NextSlotId directly from the current stream 
-                            // (Offset to NextSlotId is MetadataEntrySize - 4)
                             stream.Seek(Constants.MetadataStart + (slotToDelete * MetadataEntrySize) + (MetadataEntrySize - 4), SeekOrigin.Begin);
                             int next = reader.ReadInt32();
 
-                            // Mark the slot as free (Offset to Type is 56)
-                            stream.Seek(Constants.MetadataStart + (slotToDelete * MetadataEntrySize) + 56, SeekOrigin.Begin);
+                            stream.Seek(Constants.MetadataStart + (slotToDelete * MetadataEntrySize) 
+                                + Constants.MaxFileNameLength 
+                                + Constants.SizeLength 
+                                + Constants.OffsetLength 
+                                + Constants.CheckSumLenght, 
+                                SeekOrigin.Begin);
+
                             writer.Write((byte)Metadata.FsObjectType.Free);
 
                             deletedCount++;
 
-                            // Safety check: prevent infinite loop if a file points to itself
                             if (next == slotToDelete) break;
                             slotToDelete = next;
                         }

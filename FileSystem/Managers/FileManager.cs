@@ -50,11 +50,16 @@ namespace FileManagment.FileSystem.Managers
                 int globalCount = reader.ReadInt32();
                 int headSlotIndex = FindFreeSlot(reader, stream);
 
-                // --- FIX: MARK HEAD AS OCCUPIED IMMEDIATELY ---
-                // We skip Name (32), Size (8), Offset (8), CheckSum (8) to reach Type (1)
-                stream.Seek(Constants.MetadataStart + (headSlotIndex * _MetadataEntrySize) + 56, SeekOrigin.Begin);
+                stream.Seek(Constants.MetadataStart 
+                    + (headSlotIndex * _MetadataEntrySize) 
+                    + Constants.MaxFileNameLength 
+                    + Constants.SizeLength 
+                    + Constants.OffsetLength 
+                    + Constants.CheckSumLenght, 
+                    SeekOrigin.Begin);
+
                 writer.Write((byte)Metadata.FsObjectType.File);
-                writer.Flush(); // Force write to disk so FindFreeSlot won't pick it again
+                writer.Flush(); 
 
                 int currentSlot = headSlotIndex;
                 int slotsUsed = 1;
@@ -85,7 +90,7 @@ namespace FileManagment.FileSystem.Managers
                         writer.Write((byte)Metadata.FsObjectType.FilePart);
                         writer.Write(CurrentFolderID);
                         writer.Write((int)-1);
-                        writer.Flush(); // Ensure this slot is now marked as "FilePart"
+                        writer.Flush();
 
                         currentSlot = nextSlot;
                         stream.Seek(_DataStartOffset + (long)currentSlot * Constants.BlockSize, SeekOrigin.Begin);
