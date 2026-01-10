@@ -61,13 +61,12 @@ dotnet run
 
 ## 🧠 Internal Design
 
-+------------------+
-| File Count (4B)  |
-+------------------+
-| Metadata Entries |
-+------------------+
-| Data Blocks      |
-+------------------+
+| Structure        | Size (Bytes) | Count |
+|------------------|--------------|-------|
+| File Count       | 4            | 1     |    
+| Metadata Entries | 61           | 100   |
+| Data Blocks      | 512          | 100   |
+
 
 ---
 
